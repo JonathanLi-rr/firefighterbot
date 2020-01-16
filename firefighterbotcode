@@ -1,0 +1,612 @@
+
+Maze 1 Code:
+  #chip 16f887, 4
+  #config OSC = INTOSCIO
+
+Dir PORTA IN
+Dir PORTD OUT
+Dir PORTB OUT
+
+'Variables used
+Dim wallL as Byte
+Dim wallF as Byte
+Dim flame as Byte
+Dim last as Byte
+Dim count as Byte
+Dim DS as Byte
+Dim DF as Byte
+Dim prev as Byte
+Dim start as Byte
+Dim LF as Byte
+Dim LFF
+
+'LCD set up
+#define LCD_IO 4
+#define LCD_Speed SLOW
+
+#define LCD_RS      PORTD.0
+#define LCD_NO_RW
+#define LCD_Enable  PORTD.2
+#define LCD_DB4     PORTD.4
+#define LCD_DB5     PORTD.5
+#define LCD_DB6     PORTD.6
+#define LCD_DB7     PORTD.7
+
+'initial setup
+PAUSE 1000
+CLS
+locate 0,0
+print "     WF:  F:  L:"
+PORTB.0 = 0
+count = 0
+last = 0
+prev = 0
+start = 0
+  MAIN:
+  Do
+    'update sensor values
+    wallL = ReadAD(AN3, TRUE)
+    DS = ((6787/ (wallL-3)) -4)/5
+    LFF = LF
+    LF = DF
+    wallF = ReadAD(AN2, TRUE)
+    DF = ((6787/ (wallF-3)) -4)/5
+    flame = ReadAD(AN1, TRUE)
+
+    'print all useful data on LCD
+    locate 1,0
+    print "                "
+    locate 1,0
+    print DS
+    locate 1,5
+    print DF
+    locate 1,14
+    if PORTA.0 = 1 then print "F"
+    locate 1,14
+    if PORTA.0 = 0 then print "T"
+    locate 1,10
+    print 255-flame
+    locate 0,12
+    print " "
+    locate 0,0
+    print "   "
+    locate 0,8
+    print " "
+    locate 1, 15
+    print count
+    locate 1,11
+    print start
+    locate 0,0
+    print "     "
+
+    PORTB.4 = 0
+    PORTB.2 = 0
+    PORTB.3 = 1
+    PORTB.1 = 1
+
+    PORTB.0 = 0
+    PAUSE 20
+
+
+    If PORTA.0 = 0 then goto LCOUNT 'counts lines
+    last = 0
+    If count = 6 then start=start+1 'starts timer if it sees 6 lines
+    If start > 20 and DF>25 and DS>25 then GOTO ZOOM 'clears gap from room 3-4 if timer is high enough
+    If (255-flame)>200 and DF<20 then goto FD 'checks for flame
+    If DS>18 then GOTO WDW 'checks if it needs to do a wide turn (u-turn)
+    If DF<20 and DF>9 and (LFF-DF)<4 then goto WDF 'checks for wall in front and triggers right turn
+    If DS<10 then GOTO WDL 'keeps bot hugging left wall
+    If DS>11 then GOTO WDR '^^^^^^^^^^^
+
+  Loop
+
+WDL: 'moves bot right if wall is too close
+  wallL = ReadAD(AN3, TRUE)
+  DS = ((6787/ (wallL-3)) -4)/5
+  locate 1,0
+    print "   "
+  locate 1,0
+    print DS
+  'locate 0,0
+    'print "L"
+  locate 0,0
+    print "WDL"
+  PORTB.4 = 1
+  PORTB.2 = 0
+  PORTB.3 = 0
+  PORTB.1 = 1
+  PAUSE 20
+
+  'If DS<11 then GOTO WDL
+  GOTO MAIN
+
+WDR: 'moves bot close to wall
+  wallL = ReadAD(AN3, TRUE)
+  DS = ((6787/ (wallL-3)) -4)/5
+  locate 1,0
+    print "   "
+  locate 1,0
+    print DS
+  'locate 0,2
+    'print "R"
+  locate 0,0
+    print "WDR"
+  PORTB.4 = 0
+  PORTB.2 = 1
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 20
+
+  'If DS>12 then GOTO WDR
+  GOTO MAIN
+
+WDF: 'turns bot 90 degrees right if it sees wall in front
+  wallF = ReadAD(AN2, TRUE)
+  DF = ((6787/ (wallF-3)) -4)/5
+  locate 1,5
+    print "   "
+  locate 1,5
+    print DF
+  locate 0,8
+    print "*"
+  locate 0,0
+    print "WDF"
+  PORTB.4 = 1
+  PORTB.2 = 0
+  PORTB.3 = 0
+  PORTB.1 = 1
+  PAUSE 600 'Duration of turn
+  GOTO MAIN
+
+WDW: 'allows the bot to take a wider turn for end of walls
+  wallL = ReadAD(AN3, TRUE)
+  DS = ((6787/ (wallL-3)) -4)/5
+  locate 1,0
+    print "   "
+  locate 1,0
+    print DS
+  locate 0,0
+    print "WDW"
+
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 350 'Width of turn
+
+  GOTO MAIN
+
+LCOUNT: 'counts line by tracking what colour it last saw on the floor
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 1
+  PORTB.1 = 1
+
+  If last = 0 then count = count + 1
+  last = 1
+
+  GOTO MAIN
+
+FDF:    'starts sweep from left
+  locate 0,0
+    print "FDF"
+  PORTB.4 = 0
+  PORTB.2 = 1
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 1000
+  flame = ReadAD(AN1, TRUE)
+  GOTO FDF2:
+
+FDF2: 'turns right until flame values goes from big to large to know it passed flame
+  locate 0,0
+    print "FDF2"
+  prev = flame
+  flame = ReadAD(AN1, TRUE)
+  PORTB.4 = 1
+  PORTB.2 = 0
+  PORTB.3 = 0
+  PORTB.1 = 1
+  PAUSE 250
+  if 255-flame < 255-prev then goto FD
+  GOTO FDF2
+
+FD: 'lines bot up with flame and turns fan on for 60 seconds
+  locate 0,12
+    print "*"
+  locate 0,0
+    print "FD"
+  PORTB.4 = 0
+  PORTB.2 = 1
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 250
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 0
+  PORTB.1 = 0
+  PORTB.0 = 1
+  PAUSE 60000
+
+ZOOM: 'skips gap and goes to room 4
+  locate 0,0
+    print "ZOOM"
+  PORTB.4 = 1
+  PORTB.2 = 0
+  PORTB.3 = 0
+  PORTB.1 = 1
+  PAUSE 350
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 1
+  PORTB.1 = 1
+  count = 0
+  start = 0
+  PAUSE 3000
+  GOTO Main
+
+
+Maze 2 Code:
+  #chip 16f887, 4
+  #config OSC = INTOSCIO
+
+Dir PORTA IN
+Dir PORTD OUT
+Dir PORTB OUT
+
+'Variable List
+Dim wallL as Byte
+Dim wallF as Byte
+Dim flame as Byte
+Dim last as Byte
+Dim count as Byte
+Dim DS as Byte
+Dim DF as Byte
+Dim prev as Byte
+Dim start as Byte
+Dim LF as Byte
+Dim LFF as Byte
+Dim rm as Byte
+Dim trig as Byte
+Dim xx as Byte
+Dim yy as Word
+
+'setting up LCD screen to correct ports
+#define LCD_IO 4
+#define LCD_Speed SLOW
+
+#define LCD_RS      PORTD.0
+#define LCD_NO_RW
+#define LCD_Enable  PORTD.2
+#define LCD_DB4     PORTD.4
+#define LCD_DB5     PORTD.5
+#define LCD_DB6     PORTD.6
+#define LCD_DB7     PORTD.7
+
+'initial set up
+PAUSE 1000
+CLS
+locate 0,0
+print "              L:"
+PORTB.0 = 0
+count = 0
+last = 0
+prev = 0
+start = 0
+trig = 0
+rm = 1
+xx=50
+yy=600
+
+MAIN:
+  Do
+    'Update sensor values
+    wallL = ReadAD(AN3, TRUE)
+    DS = ((6787/ (wallL-3)) -4)/5
+    LFF = LF
+    LF = DF
+    wallF = ReadAD(AN2, TRUE)
+    DF = ((6787/ (wallF-3)) -4)/5
+    flame = ReadAD(AN1, TRUE)
+
+    'update LCD with all needed info
+    locate 1,0
+    print "                "
+    locate 0,0
+    print "   "
+    locate 0,8
+    print " "
+    locate 1, 15
+    print count
+    locate 0,5
+    print start
+    locate 0,0
+    print "     "
+    locate 0,10
+    print rm
+
+    'drive forward
+    PORTB.4 = 0
+    PORTB.2 = 0
+    PORTB.3 = 1
+    PORTB.1 = 1
+    'fan off
+    PORTB.0 = 0
+    PAUSE 20
+
+    if trig = 1 then start = start+1 'starts a timer used for room 2
+    if count = 1 and DF<20 and rm=4 then rm=5 'once triggered the front wall detection is changed to help with room 4
+    if PORTA.0 = 0 and rm=3 then goto ROOM3 'triggers room 3 once hitting line
+    If PORTA.0 = 0 and (rm=1 or rm=4) then goto LCOUNT 'counts lines
+    last = 0
+    if DF<55 and DF>50 and (LFF-DF)<4 and start>60 and rm=2 then goto ROOM1 'Actually ROOM2
+    if count = 2 and rm=1 then goto ROOM1 'triggers room1 check
+    If (255-flame)>240 and DF<19 then goto FD   'checks for flame
+    If DS>25 then GOTO WDW 'checks if it needs to do a wide turn (u-turn)
+    If DF<16 and DF>7 and (LFF-DF)<4 then gosub WDF  'checks for wall in front and triggers right turn
+    If DS<8 then GOto WDL   'keeps bot hugging left wall
+    If DS>9 then GOto WDR   '10 '^^^^^^^^^^
+
+  Loop
+
+WDL: 'moves bot right if wall is too close
+  wallL = ReadAD(AN3, TRUE)
+  DS = ((6787/ (wallL-3)) -4)/5
+  locate 0,0
+    print "WDL"
+  PORTB.4 = 1
+  PORTB.2 = 0
+  PORTB.3 = 0
+  PORTB.1 = 1
+  PAUSE 10
+
+  goto MAIN
+
+WDR: 'moves bot close to wall
+  wallL = ReadAD(AN3, TRUE)
+  DS = ((6787/ (wallL-3)) -4)/5
+  locate 0,0
+    print "WDR"
+  PORTB.4 = 0
+  PORTB.2 = 1
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 10
+
+  goto MAIN
+
+WDF: 'turns bot 90 degrees right if it sees wall in front
+  wallF = ReadAD(AN2, TRUE)
+  DF = ((6787/ (wallF-3)) -4)/5
+  locate 0,0
+    print "WDF"
+
+  if rm<5 then xx=0 and yy=600
+  if rm=5 then xx=50 and yy=600
+
+  PORTB.4 = 1
+  PORTB.2 = 0
+  PORTB.3 = 0
+  PORTB.1 = 1
+  PAUSE yy 'Duration of turn *******
+
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 1
+  PORTB.1 = 1
+  PAUSE xx
+
+  if rm=2 then gosub ROOM2
+  return
+
+WDW: 'allows the bot to take a wider turn for end of walls
+  wallL = ReadAD(AN3, TRUE)
+  DS = ((6787/ (wallL-3)) -4)/5
+  locate 0,0
+    print "WDW"
+
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 50
+  if PORTA.0 = 0 and rm=3 then goto ROOM3 'checks for line during wide turn
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 50
+  if PORTA.0 = 0 and r=31 then goto ROOM3
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 50
+  if PORTA.0 = 0 and rm=3 then goto ROOM3
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 50 'Width of turn    350
+
+  GOTO MAIN
+
+LCOUNT: 'counts line by tracking what colour it last saw on the floor
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 1
+  PORTB.1 = 1
+
+  If last = 0 then count = count + 1
+  last = 1
+
+  GOTO MAIN
+
+FD: 'lines bot up with flame and turns fan on for 30 seconds
+  locate 0,0
+    print "FD"
+  PORTB.4 = 1
+  PORTB.2 = 0
+  PORTB.3 = 0
+  PORTB.1 = 1
+  PAUSE 250
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 1
+  PORTB.1 = 1
+  PAUSE 500
+  PORTB.4 = 0
+  PORTB.2 = 1
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 250
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 0
+  PORTB.1 = 0
+  PORTB.0 = 1
+  PAUSE 30000
+  goto MAIN
+
+ROOM1: 'turns bot to the check room and then turns back
+  locate 0,0
+    print"RM1"
+  rm = rm+1
+  PORTB.4 = 1
+  PORTB.2 = 1
+  PORTB.3 = 0
+  PORTB.1 = 0
+  PAUSE 600
+
+
+  PORTB.4 = 1
+  PORTB.2 = 0
+  PORTB.3 = 0
+  PORTB.1 = 1
+  PAUSE 700
+
+  flame = ReadAD(AN1, TRUE)
+  if (255-flame)>1 then goto ROOM12
+
+  PORTB.4 = 0
+  PORTB.2 = 1
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 700
+
+  count = 0
+  trig = 0
+  start = 0
+
+  goto MAIN
+
+ROOM12: 'moves bot towards flame if it sees one during ROOM1
+  locate 0,0
+    print"RM12"
+  do until DS<12
+    wallL = ReadAD(AN3, TRUE)
+    DS = ((6787/ (wallL-3)) -4)/5
+    PORTB.4 = 0
+    PORTB.2 = 0
+    PORTB.3 = 1
+    PORTB.1 = 1
+    pause 20
+  loop
+  goto MAIN
+
+ROOM2: 'triggers timer for room 2
+  trig = 1
+  return
+
+ROOM3: 'drives bot forward until it sees wall on left and backs up, turns and moves to flame
+  locate 0,0
+    print"RM3"
+  PORTB.4 = 0
+  PORTB.2 = 1
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 150
+
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 1
+  PORTB.1 = 1
+  PAUSE 500
+
+  do until DF<12 'checks for wall infront
+    wallF = ReadAD(AN2, TRUE)
+    DF = ((6787/ (wallF-3)) -4)/5
+    PORTB.4 = 0
+    PORTB.2 = 0
+    PORTB.3 = 1
+    PORTB.1 = 1
+    PAUSE 8
+    PORTB.4 = 0
+    PORTB.2 = 0
+    PORTB.3 = 1
+    PORTB.1 = 0
+    PAUSE 2
+  loop
+
+  PORTB.4 = 0
+  PORTB.2 = 1
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 800 '800
+
+  flame = ReadAD(AN1, TRUE)
+  if (255-flame)<10 then goto ROOM32
+
+  PORTB.4 = 0
+  PORTB.2 = 0
+  PORTB.3 = 1
+  PORTB.1 = 1
+  PAUSE 700
+
+  do until DF<22 and (LFF-DF)<4 'checks for wall infront
+    LFF = LF
+    LF = DF
+    wallF = ReadAD(AN2, TRUE)
+    DF = ((6787/ (wallF-3)) -4)/5
+    PORTB.4 = 0
+    PORTB.2 = 0
+    PORTB.3 = 1
+    PORTB.1 = 1
+    PAUSE 10
+  loop
+
+  PORTB.0 = 1
+  do 'spins bot with fan on
+    PORTB.4 = 0
+    PORTB.2 = 0
+    PORTB.3 = 0
+    PORTB.1 = 0
+    pause 100
+    PORTB.4 = 1
+    PORTB.2 = 0
+    PORTB.3 = 0
+    PORTB.1 = 1
+    pause 75
+  loop
+
+ROOM32: 'moves bot out of room 3 if it doesn't see flame
+  rm = 4
+  PORTB.4 = 0
+  PORTB.2 = 1
+  PORTB.3 = 1
+  PORTB.1 = 0
+  PAUSE 500
+
+  do until DS<12
+   wallL = ReadAD(AN3, TRUE)
+   DS = ((6787/ (wallL-3)) -4)/5
+   PORTB.4 = 0
+   PORTB.2 = 0
+   PORTB.3 = 1
+   PORTB.1 = 1
+   pause 20
+  loop
+
+  GOTO MAIN
+
+'room 4 just uses modfied wall hugging and standard flame detection
